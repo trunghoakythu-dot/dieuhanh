@@ -143,9 +143,10 @@ const ms=p=>({recv:add(p.dep,-12),sub:add(p.dep,-10),visa:add(p.dep,-4)});
 function link(p){const din=p.din||add(p.dep,1),k=norm(p.key),c=norm(p.code);
   const m=DATA.board.filter(r=>{const h=norm(r.code+" "+r.team);return h.includes(c)||(r.dIn===din&&k&&h.includes(k))});return m.length===1?m[0]:null}
 function state(p){const r=link(p);const st=r?(r.status||"moi"):"";const vs=r?"":(p.vstat||"");
-  const recv=(!!r&&((r.n||0)>0||["xuat","nop","visa"].includes(st)))||["nhan","nop","visa"].includes(vs);
-  const sub=(!!r&&(!!r.submittedAt||["nop","visa"].includes(st)))||["nop","visa"].includes(vs);
+  let recv=(!!r&&((r.n||0)>0||["xuat","nop","visa"].includes(st)))||["nhan","nop","visa"].includes(vs);
+  let sub=(!!r&&(!!r.submittedAt||["nop","visa"].includes(st)))||["nop","visa"].includes(vs);
   const visa=(!!r&&st==="visa")||vs==="visa";
+  if(visa)sub=true;if(sub)recv=true;
   const k=p.cancel?"huy":visa?"visa":sub?"nop":recv?"nhan":"cho";return {recv,sub,visa,k}}
 const ST={cho:["Chờ hồ sơ","p-grey"],nhan:["Đã nhận HS","p-amber"],nop:["Đã nộp","p-jade"],visa:["Có visa","p-ok"],huy:["Huỷ","p-grey"]};
 let live=[];
@@ -156,7 +157,7 @@ function tasks(){const out=[];
     if(!s.visa)out.push({date:m.visa,what:"Hạn có visa",p,hard:true});
     out.push({date:p.dep,what:"Đoàn bay",p,fly:true})});
   const lbl=["Kiểm tra SL","Cọc 1","Cọc 2","Cọc 3","Vào tên","Xuất vé"],dk=[0,null,1,2,3,4];
-  DATA.tickets.forEach(t=>{if((t.cancel||/huỷ|hủy/i.test(t.note)))return;lbl.forEach((l,i)=>{const di=dk[i];if(di==null||t.done[i])return;const d=t.due[di];if(d)out.push({date:d,what:l+" vé",t})})});
+  DATA.tickets.forEach(t=>{if((t.cancel||/huỷ|hủy/i.test(t.note)))return;lbl.forEach((l,i)=>{const di=dk[i];if(di==null||t.done[i])return;const d=t.due[di];if(d)out.push({date:d,what:/vé$/.test(l)?l:l+" vé",t})})});
   return out.sort((a,b)=>a.date.localeCompare(b.date))}
 function row(x){const d=x.date,late=d<TODAY&&!x.fly;
   let t,m,pill;
@@ -168,7 +169,9 @@ function vHomnay(){const T=tasks();const in7=add(TODAY,7);
   const late=T.filter(x=>x.date<TODAY&&!x.fly&&(x.t||x.p.dep>=TODAY));const today=T.filter(x=>x.date===TODAY);const week=T.filter(x=>x.date>TODAY&&x.date<=in7);
   const fly7=live.filter(p=>p.dep>=TODAY&&p.dep<=in7).length+DATA.tickets.filter(t=>t.dep>=TODAY&&t.dep<=in7&&!(t.cancel||/huỷ|hủy/i.test(t.note))&&!live.some(p=>p.dep===t.dep&&norm(p.code).includes(norm(t.code))) ).length;
   const lim=a=>a.slice(0,12).map(row).join("")+(a.length>12?`<div class="it"><div></div><div class="m">và ${a.length-12} việc nữa</div><div></div></div>`:"");
-  return `<section class="stats"><div class="stat ${late.length?"red":""}"><b>${late.length}</b><span>Việc quá hạn</span></div><div class="stat gold"><b>${today.length}</b><span>Việc hôm nay</span></div><div class="stat"><b>${fly7}</b><span>Đoàn bay 7 ngày</span></div></section>
+  const va=DATA.visaAt?new Date(DATA.visaAt):null;const hrs=va?(Date.now()-va)/36e5:999;
+  const stale=hrs>6?`<section class="soon" style="border-color:var(--seal);background:var(--seal-soft)"><h2 style="font-size:16px;color:var(--seal)">⚠ Kế hoạch & visa chưa cập nhật ${va?Math.round(hrs)+" giờ":""}</h2><p style="margin:0;font-size:13.5px;color:var(--ink)">Lần đồng bộ cuối: ${va?va.toLocaleString("vi-VN",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"chưa có"}. Các việc "trễ" dưới đây có thể đã làm xong. Trên máy tính, mở Trung tâm Điều hành → bấm nút đỏ <b>📱 Đồng bộ app</b>, rồi bấm Tải lại ở đây.</p></section>`:"";
+  return stale+`<section class="stats"><div class="stat ${late.length?"red":""}"><b>${late.length}</b><span>Việc quá hạn</span></div><div class="stat gold"><b>${today.length}</b><span>Việc hôm nay</span></div><div class="stat"><b>${fly7}</b><span>Đoàn bay 7 ngày</span></div></section>
   <section class="sec"><div class="sec-h"><h2>Hôm nay</h2><span class="small">${today.length} việc</span></div>${today.length?`<div class="list">${lim(today)}</div>`:`<div class="empty">Hôm nay không có việc đến hạn.</div>`}</section>
   ${late.length?`<section class="sec"><div class="sec-h"><h2 style="color:var(--seal)">Quá hạn</h2><span class="small">đoàn chưa bay</span></div><div class="list">${lim(late)}</div></section>`:""}
   <section class="sec"><div class="sec-h"><h2>7 ngày tới</h2><span class="small">${week.length} việc</span></div>${week.length?`<div class="list">${lim(week)}</div>`:`<div class="empty">Không có việc trong 7 ngày tới.</div>`}</section>`}
@@ -196,18 +199,35 @@ function vVe(){const U=DATA.tickets.filter(t=>t.dep>=TODAY).sort((a,b)=>a.dep.lo
   return `<section class="stats">${Object.keys(by).slice(0,3).map(h=>`<div class="stat"><b>${by[h]}</b><span>Vé ${esc(h)} sắp bay</span></div>`).join("")}</section>
   <section class="sec"><div class="sec-h"><h2>Đoàn vé sắp bay</h2><span class="small">${U.length} đoàn</span></div><div class="list">${U.slice(0,25).map(t=>{const huy=t.cancel||/huỷ|hủy/i.test(t.note);const n=t.next||"";const red=/quá hạn|^Cọc|^Vào tên|^Xuất vé|^Kiểm tra/i.test(n)&&!huy;
     return `<div class="it"><div class="d"><b>${t.dep.slice(8,10)}</b><span>${wd(t.dep)} T${+t.dep.slice(5,7)}</span></div><div style="min-width:0"><div class="t" ${huy?'style="text-decoration:line-through"':""}>${esc(t.code)}</div><div class="m">${t.seats||0} vé${t.pax?` · ${t.pax} khách chốt`:""} · ${esc(t.fOut)}</div></div><span class="pill ${huy?"p-grey":n==="Chờ bay"?"p-ok":red?"p-amber":"p-grey"}">${esc(huy?"Đã huỷ":n||"—")}</span></div>`}).join("")}</div></section>`}
-function vTaichinh(){return `<section class="soon"><h2>Tài chính · đang dựng</h2><p style="margin:0;color:var(--muted);font-size:14px">Mục này sẽ lấy số liệu từ khu Tài vụ trên link máy tính, sau khi nhân viên kéo thả invoice của từng đoàn.</p>
-  <ul><li>Tổng phải thu, đã thu, còn phải thu theo đoàn và theo đại lý</li><li>Chênh lệch chuyển dư USD theo tỷ giá ngân hàng</li><li>Hoa hồng điều hành Sun 10 tệ/khách, tổng kết tuần</li><li>Đoàn sắp đến hạn thu tiền</li></ul></section>`}
+let FIN=null,FCUR="",FOPEN="";
+function vTaichinh(){
+  if(!FIN||!(FIN.ag||[]).length)return `<section class="soon"><h2>Tài chính · chưa có số liệu</h2><p style="margin:0;color:var(--muted);font-size:14px">Trên máy tính, mở Trung tâm Điều hành → khu <b>Visa & kế hoạch</b> → bấm <b>📱 Đồng bộ app điện thoại</b>. Số liệu khu Tài vụ sẽ được gửi sang đây.</p></section>`;
+  const curs=[...new Set(FIN.ag.map(a=>a.cu))].sort((a,b)=>a==="RMB"?-1:b==="RMB"?1:0);if(!curs.includes(FCUR))FCUR=curs[0];
+  const u=FCUR==="USD"?" USD":" tệ",dg=FCUR==="USD"?2:0;const f=v=>(Number(v)||0).toLocaleString("vi-VN",{maximumFractionDigits:dg});
+  const A=FIN.ag.filter(a=>a.cu===FCUR).sort((a,b)=>b.o-a.o||b.rf-a.rf||a.a.localeCompare(b.a,"vi"));
+  const T={t:0,pd:0,o:0,rf:0,pf:0,n:0,pm:0};A.forEach(a=>{for(const k in T)T[k]+=Number(a[k])||0});
+  const P=FIN.priv;
+  const G=(FIN.g||[]).filter(g=>g[3]===FCUR);
+  const seg=curs.length>1?`<div class="segs" role="group" aria-label="Tiền tệ">${curs.map(c=>`<button class="seg" data-fcur="${c}" aria-pressed="${c===FCUR}">${c==="USD"?"USD":"Nhân dân tệ"}</button>`).join("")}</div>`:"";
+  const cards=A.map(a=>{const op=FOPEN===a.a+"|"+a.cu;const gl=G.filter(g=>g[1]===a.a);const pct=a.t>0?Math.min(100,a.pd/a.t*100):0;
+    const rows=op?`<div class="rows list" style="border:0;border-radius:0">${gl.length?gl.map(g=>`<div class="it"><div class="d"><b>${g[2]?g[2].slice(8,10):"—"}</b><span>${g[2]?"T"+(+g[2].slice(5,7)):""}</span></div><div style="min-width:0"><div class="t">${esc(g[0])}</div><div class="m">Invoice ${f(g[4])}${u} · đã thu ${f(g[5])}${u}</div></div><span class="pill ${g[7]>0.5?"p-red":"p-amber"}">${g[7]>0.5?"Hoàn "+f(g[7]):"Còn "+f(g[6])}</span></div>`).join(""):`<div class="it"><div></div><div class="m">Các đoàn của đại lý này đã thu đủ.</div><div></div></div>`}</div>`:"";
+    return `<div class="ag"><button aria-expanded="${op}" data-fag="${esc(a.a+"|"+a.cu)}"><span class="nm">${esc(a.a)}</span><span class="num"><b style="${a.o>0.5?"color:var(--seal)":""}">${f(a.o)}</b><span>còn phải thu</span></span><span class="sub">${a.n} đoàn · invoice ${f(a.t)}${u} · đã thu ${f(a.pd)}${a.rf>0.5?` · <b style="color:var(--seal)">hoàn ${f(a.rf)}</b>`:""}${P&&a.pf?` · lãi ${f(a.pf)}`:""}</span><span class="bar"><i style="width:${pct}%;background:var(--ok)"></i></span></button>${rows}</div>`}).join("");
+  const up=G.filter(g=>g[6]>0.5).slice(0,12);
+  return `${seg}<section class="stats"><div class="stat"><b>${f(T.t)}</b><span>Tổng invoice${u}</span></div><div class="stat"><b style="color:var(--ok)">${f(T.pd)}</b><span>Đã thu</span></div><div class="stat ${T.o>0.5?"red":""}"><b>${f(T.o)}</b><span>Còn phải thu</span></div></section>
+  ${T.rf>0.5||P?`<section class="stats">${T.rf>0.5?`<div class="stat red"><b>${f(T.rf)}</b><span>Phải hoàn đại lý</span></div>`:""}${P?`<div class="stat gold"><b>${f(T.pf)}</b><span>Chênh lệch (lãi)${T.pm?` · ${T.pm} đoàn thiếu invoice Trung`:""}</span></div>`:""}</section>`:""}
+  <section class="sec"><div class="sec-h"><h2>Theo đại lý</h2><span class="small">bấm để xem từng đoàn</span></div>${cards||`<div class="empty">Chưa có đoàn nào bằng ${FCUR}.</div>`}</section>
+  <section class="sec"><div class="sec-h"><h2>Đoàn còn phải thu</h2><span class="small">theo ngày bay</span></div>${up.length?`<div class="list">${up.map(g=>`<div class="it"><div class="d"><b>${g[2]?g[2].slice(8,10):"—"}</b><span>${g[2]?wd(g[2])+" T"+(+g[2].slice(5,7)):""}</span></div><div style="min-width:0"><div class="t">${esc(g[0])}</div><div class="m">${esc(g[1]||"—")} · đã thu ${f(g[5])}/${f(g[4])}${u}</div></div><span class="pill ${g[2]&&g[2]<TODAY?"p-red":"p-amber"}">${f(g[6])}</span></div>`).join("")}</div>`:`<div class="empty">Không còn đoàn nào phải thu.</div>`}</section>
+  <div class="foot">Tài vụ đồng bộ ${new Date(FIN.at).toLocaleString("vi-VN",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"})} · ${FIN.n} đoàn${FIN.noinv?` · ${FIN.noinv} đoàn chưa có invoice`:""}</div>`}
 const V={homnay:vHomnay,series:vSeries,visa:vVisa,ve:vVe,taichinh:vTaichinh};let cur="homnay";
 function show(v){cur=V[v]?v:"homnay";document.querySelectorAll("nav button").forEach(b=>b.setAttribute("aria-selected",b.dataset.v===cur));$("#main").innerHTML=`<div class="view" style="display:grid;gap:18px">${V[cur]()}<div class="foot">${footTxt()}</div></div>`;try{localStorage.setItem("dh-tab",cur)}catch(e){}}
 document.querySelector("nav").addEventListener("click",e=>{const b=e.target.closest("button[data-v]");if(b){show(b.dataset.v);window.scrollTo(0,0)}});
-$("#main").addEventListener("click",e=>{const s=e.target.closest("[data-ser]");if(s){SER=s.dataset.ser;OPEN="";show(cur);return}const a=e.target.closest("[data-ag]");if(a){OPEN=OPEN===a.dataset.ag?"":a.dataset.ag;show(cur)}});
+$("#main").addEventListener("click",e=>{const fc=e.target.closest("[data-fcur]");if(fc){FCUR=fc.dataset.fcur;FOPEN="";show(cur);return}const fa=e.target.closest("[data-fag]");if(fa){FOPEN=FOPEN===fa.dataset.fag?"":fa.dataset.fag;show(cur);return}const s=e.target.closest("[data-ser]");if(s){SER=s.dataset.ser;OPEN="";show(cur);return}const a=e.target.closest("[data-ag]");if(a){OPEN=OPEN===a.dataset.ag?"":a.dataset.ag;show(cur)}});
 const n=new Date();$("#today").textContent=`${WDL[n.getDay()]}, ${pad(n.getDate())}/${pad(n.getMonth()+1)}/${n.getFullYear()}`;
 const h=n.getHours();$("#hello").textContent=(h<11?"Chào buổi sáng":h<14?"Chào buổi trưa":h<18?"Chào buổi chiều":"Chào buổi tối")+", chị Liên";
 let start="homnay";try{start=localStorage.getItem("dh-tab")||"homnay"}catch(e){}
 const LS={get:k=>{try{return localStorage.getItem(k)}catch(e){return null}},set:(k,v)=>{try{localStorage.setItem(k,v)}catch(e){}}};
 function footTxt(){const t=s=>s?new Date(s).toLocaleString("vi-VN",{hour:"2-digit",minute:"2-digit",day:"2-digit",month:"2-digit"}):"chưa có";return `Vé cập nhật ${t(DATA.at)} · Visa đồng bộ ${t(DATA.visaAt)}`}
-function apply(d){DATA=d;TODAY=d.today||iso(new Date());live=DATA.plan.filter(p=>!p.cancel);show(cur||start)}
+function apply(d){DATA=d;FIN=null;const fr=(d.plan||[]).find(p=>p.code==="__FIN__");if(fr)FIN=fr._fin||null;DATA.plan=(d.plan||[]).filter(p=>p.code!=="__FIN__");TODAY=d.today||iso(new Date());live=DATA.plan.filter(p=>!p.cancel);show(cur||start)}
 function setup(msg){$("#main").innerHTML=`<section class="soon"><h2>Kết nối dữ liệu</h2><p style="margin:0;color:var(--muted);font-size:14px">${msg||"Dán link app Vé đoàn (có đuôi <b>?k=…</b>) một lần. Link được lưu trên máy này."}</p>
   <input id="lk" type="url" placeholder="https://script.google.com/macros/s/…/exec?k=…" style="width:100%;padding:12px;border-radius:10px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:15px var(--f-body)">
   <button id="lkb" class="seg" aria-pressed="true" style="justify-self:start">Kết nối</button></section>`;

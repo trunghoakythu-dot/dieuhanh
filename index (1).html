@@ -141,6 +141,7 @@ const isSun=p=>/sun/i.test(p.series||"");
 /* visa milestones: recv −12 · submit −10 · visa −4 */
 const ms=p=>({recv:add(p.dep,-12),sub:add(p.dep,-10),visa:add(p.dep,-4)});
 function link(p){const din=p.din||add(p.dep,1),k=norm(p.key),c=norm(p.code);
+  const ex=DATA.board.filter(r=>norm(r.code)===c);if(ex.length)return ex[0];
   const m=DATA.board.filter(r=>{const h=norm(r.code+" "+r.team);return h.includes(c)||(r.dIn===din&&k&&h.includes(k))});return m.length===1?m[0]:null}
 function state(p){const r=link(p);const st=r?(r.status||"moi"):"";const vs=r?"":(p.vstat||"");
   let recv=(!!r&&((r.n||0)>0||["xuat","nop","visa"].includes(st)))||["nhan","nop","visa"].includes(vs);
